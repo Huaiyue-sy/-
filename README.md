@@ -41,7 +41,7 @@
 要求 Python 3.13（3.10+ 亦可）。依赖：numpy / scipy / scikit-learn / pandas / matplotlib / torch / torchvision / ultralytics。
 
 ```bash
-git clone https://github.com/Huaiyue-sy/-.git
+git clone https://github.com/Huaiyue-sy/-.git 工业数据分析与挖掘综合实训
 cd 工业数据分析与挖掘综合实训
 
 python3 -m venv .venv
