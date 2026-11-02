@@ -1,19 +1,46 @@
 """设备运维诊断智能体 —— 大模型接入层。
 
-优先调用 DeepSeek API（环境变量 DEEPSEEK_API_KEY，兼容
-DEEPSEEK_BASE_URL 覆盖）；无 key 或调用失败时自动降级为
-内置规则模板生成诊断内容，保证离线可演示。
+优先调用 DeepSeek API（环境变量 DEEPSEEK_API_KEY；也支持读取项目根目录
+被 .gitignore 忽略的 .env 或 config/deepseek.env，兼容 DEEPSEEK_BASE_URL
+覆盖）；无 key 或调用失败时自动降级为内置规则模板生成诊断内容，保证离线可演示。
 """
 from __future__ import annotations
 
 import json
 import os
-import time
+from pathlib import Path
+
+
+def _load_local_env() -> None:
+    """从本地密钥文件加载 DEEPSEEK_* 配置；已有环境变量优先。"""
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return
+    root = Path(__file__).resolve().parents[2]
+    for path in (root / ".env", root / "config" / "deepseek.env"):
+        if not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key.startswith("DEEPSEEK_"):
+                value = value.strip().strip('"').strip("'")
+                if value:
+                    os.environ.setdefault(key, value)
 
 
 class DeepSeekClient:
     def __init__(self, api_key: str | None = None, model: str = "deepseek-chat",
                  base_url: str | None = None, timeout: int = 60):
+        _load_local_env()
         self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
         self.base_url = (base_url or os.environ.get("DEEPSEEK_BASE_URL")
                          or "https://api.deepseek.com").rstrip("/")

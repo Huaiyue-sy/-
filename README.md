@@ -47,6 +47,7 @@ cd 工业数据分析与挖掘综合实训
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env   # 可选：填入 DEEPSEEK_API_KEY，智能体优先走在线大模型
 
 # 数据集不随仓库分发，放置方式见 data/README.md
 # XJTU-SY → data/XJTU-SY_Bearing_Datasets/
@@ -105,7 +106,7 @@ bash scripts/smoke_test.sh
 /query 麻点的工艺原因是什么？
 ```
 
-两个智能体均支持 **DeepSeek API 优先、离线规则降级**：设置 `DEEPSEEK_API_KEY` 时由大模型生成报告，无 key 或调用失败时自动切换到同结构的规则模板，断网也能完整演示。
+两个智能体均支持 **DeepSeek API 优先、离线规则降级**：设置 `DEEPSEEK_API_KEY`（环境变量，或项目根目录 `.env` / `config/deepseek.env`）时由大模型生成报告，无 key 或调用失败时自动切换到同结构的规则模板，断网也能完整演示。`.env` 已被 `.gitignore` 忽略，不会提交。
 
 > 智能体依赖 `models/` 下的分类、RUL 与 ResNet 权重（如 `week1_classifier.joblib`、`resnet18_neu.pth`）。这些文件体积较大且不入库，请先按上一节命令训练生成，或把本机 `models/` 目录复制过来。
 

@@ -40,3 +40,12 @@ models/
 *.rar
 *.7z
 *.tar.gz
+
+# 本地密钥（绝不入库）
+.env
+.env.*
+!.env.example
+config/*.env
+config/*.key
+secrets.*
+*.pem
