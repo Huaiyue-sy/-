@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -31,10 +32,15 @@ ASK_SYSTEM_PROMPT = (
 )
 
 
-def parse_condition(arg: str | None, agent: MaintenanceAgent, default: str = "35Hz12kN") -> str:
-    """工况参数可省略：默认取特征表里最常见的工况。"""
+def parse_condition(arg: str | None, agent: MaintenanceAgent,
+                    csv_path: str | None = None, default: str = "35Hz12kN") -> str:
+    """工况参数可省略：优先从文件路径识别，否则取特征表里最常见的工况。"""
     if arg:
         return arg
+    if csv_path:
+        m = re.search(r"(\d+(?:\.\d+)?Hz\d+(?:\.\d+)?kN)", str(csv_path))
+        if m:
+            return m.group(1)
     try:
         return agent.df["condition"].mode().iloc[0]
     except Exception:
@@ -76,7 +82,7 @@ def main() -> None:
             if not rest:
                 print("用法：/scan <csv文件> [工况，如 35Hz12kN]")
                 continue
-            cond = parse_condition(rest[1] if len(rest) > 1 else None, agent)
+            cond = parse_condition(rest[1] if len(rest) > 1 else None, agent, rest[0])
             diag = agent.diagnose_file(rest[0], cond, BearingGeometry())
             last_diagnosis, last_condition = diag, cond
             print(f"\nAgent> 诊断完成：")
@@ -93,7 +99,7 @@ def main() -> None:
             if not rest:
                 print("用法：/report <csv文件> [工况]")
                 continue
-            cond = parse_condition(rest[1] if len(rest) > 1 else None, agent)
+            cond = parse_condition(rest[1] if len(rest) > 1 else None, agent, rest[0])
             diag = agent.diagnose_file(rest[0], cond, BearingGeometry())
             last_diagnosis, last_condition = diag, cond
             print("\nAgent> " + build_report(llm, diag, cond) + "\n")
