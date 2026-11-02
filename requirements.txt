@@ -1,0 +1,16 @@
+# 工业数据分析与挖掘综合实训 依赖清单
+# 安装：pip install -r requirements.txt
+# PyTorch 建议按机器情况选源（见 README.md 环境一节）
+
+numpy==2.5.4
+scipy==1.18.1
+pandas==3.1.0
+scikit-learn==1.9.1
+joblib==1.6.0
+matplotlib==3.11.2
+pillow==13.0.0
+tqdm==4.70.1
+requests==2.34.2
+torch==2.15.0
+torchvision==0.29.2
+ultralytics==8.4.198

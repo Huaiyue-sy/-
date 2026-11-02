@@ -1,0 +1,42 @@
+# 系统与编辑器
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Office / WPS 临时锁文件（WPS 打开文档时生成，别入库）
+~$*
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# 数据集与训练产物
+data/*
+!data/.gitkeep
+!data/README.md
+*.pt
+*.pth
+*.onnx
+*.h5
+*.pkl
+*.joblib
+*.npy
+*.npz
+checkpoints/
+runs/
+outputs/
+results/
+models/
+
+# 压缩包与大数据
+*.zip
+*.rar
+*.7z
+*.tar.gz
