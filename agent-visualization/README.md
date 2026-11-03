@@ -1,6 +1,6 @@
 # 工业数据可视化智能体（TypeScript）
 
-用自然语言把工业数据变成交互式图表：选择内置实训结果或上传 CSV，输入“画出……”“对比……”“按……分布”，服务端先生成受约束的图表规格，再由 ECharts 渲染。
+用自然语言分析工业数据：选择内置实训结果或上传 CSV，所有提问统一交给在线大模型理解。模型可以自由回答字段含义、指标解释、实验结论和工程建议，也可以在需要时返回受约束的图表规格，由 ECharts 渲染成交互式图表。输出不再局限于图表。
 
 ![界面预览](assets/demo.png)
 
@@ -8,9 +8,11 @@
 
 - **内置实训结果**：轴承特征、模型对比、RUL、ResNet/EfficientNet、YOLO、消融实验等 10 个数据集。
 - **CSV 上传**：自动推断数值/类别/日期字段，支持任意列名与中文表头。
-- **自然语言转图表**：折线、柱状、散点、箱线、热力、饼图、直方图七种图表。
-- **两种规划通道**：OpenAI 兼容接口优先（默认 DeepSeek），失败或字段不合法时自动切换本地规则引擎。
-- **服务端保管密钥**：浏览器不接触 API key；只把字段画像和问题发给模型，不上传整份数据。
+- **统一在线模型**：问候、字段说明、指标解读、实验结论、工程建议和图表请求全部由在线模型回答，不再用本地固定话术分流。
+- **自由回答 + 可选图表**：模型自行判断是否需要可视化；需要时返回折线、柱状、散点、箱线、热力、饼图或直方图规格，不需要时只给文字回答，不会把输出限死为图表。
+- **对话上下文**：前端把最近 8 轮对话带回服务端，支持“那 RMS 呢”“换成柱状图”这类追问。
+- **纯在线模式**：未配置 key 或模型调用失败时直接返回错误，不提供离线规则引擎，也不会用本地模板冒充模型回答。网络超时或上游 5xx 会自动重试一次；图表规格不合法会自动让模型修正一次。
+- **服务端保管密钥**：浏览器不接触 API key；只把字段画像、少量样本行和问题发给模型，不上传整份数据。
 - **导出 PNG**：图表右上角一键导出，方便放进报告或汇报 PPT。
 - **可分享演示链接**：`http://localhost:5173/?q=画出 Bearing1_1 的 RMS 随文件序号变化` 自动执行一次提问。
 
@@ -20,7 +22,7 @@
 cd agent-visualization
 npm install
 
-# 可选：配置大模型；不配也能用规则引擎完整演示
+# 必须配置在线大模型；未配置时提问会直接报错
 cp .env.example .env
 # 或直接复用项目根目录 .env 中的 DEEPSEEK_API_KEY
 
@@ -47,10 +49,10 @@ npm start
 | --- | --- | --- |
 | `VIZ_LLM_API_KEY` | 可视化智能体专用 key | 回退 `DEEPSEEK_API_KEY` |
 | `VIZ_LLM_BASE_URL` | OpenAI 兼容地址 | `https://api.deepseek.com` |
-| `VIZ_LLM_MODEL` | 模型名 | `deepseek-chat` |
+| `VIZ_LLM_MODEL` | 模型名；当前可用 `deepseek-flash` / `deepseek-v4-pro` | `deepseek-chat`（兼容别名，实际映射 flash） |
 | `PORT` | 后端端口 | `8787` |
 
-任何 OpenAI 兼容服务都可以用，只要实现 `POST /chat/completions`。密钥只存在服务端，`.env` 已被 `.gitignore` 忽略。
+任何 OpenAI 兼容服务都可以用，只要实现 `POST /chat/completions`。密钥只存在服务端，`.env` 已被 `.gitignore` 忽略。选择模型时：`deepseek-flash` 响应快，适合图表规划；`deepseek-v4-pro` 更适合长报告与复杂推理。
 
 ## 数据
 
@@ -77,12 +79,11 @@ npm start
 
 ```text
 web/ (React + Vite + ECharts)
-   │  POST /api/chat { datasetId, question }
+   │  POST /api/chat { datasetId, question, history }
    ▼
 server/index.ts (Express + TypeScript)
    ├── datasets.ts    CSV 读取、字段画像、内置数据、上传缓存
-   ├── llm.ts         OpenAI 兼容调用 + zod 校验 + 失败降级
-   ├── planner.ts     本地规则：列名/别名匹配、图表类型、筛选、排序
+   ├── llm.ts         统一 Agent 调用：数据画像 + 对话历史 → 自由回答 + 可选图表规格（zod 校验）
    └── chart.ts       聚合/分组/分位数/热力矩阵 → ECharts option
 ```
 
@@ -102,7 +103,7 @@ server/index.ts (Express + TypeScript)
 }
 ```
 
-服务端会校验每个字段真实存在、y 必须是数值列，再做聚合与渲染。模型不可用或输出非法时，规则引擎用同一套规格结构兜底。
+在线模型返回 `{ "reply": "...", "chart": {...} }`：`reply` 是自由文字回答，`chart` 可以为 `null`。服务端会校验图表规格中的每个字段真实存在、y 必须是数值列，再做聚合与渲染；图表规格不合法时本次只返回文字回答，不会把整次请求判失败。智能体没有离线规则通道：未配置 key 返回 503，模型调用失败返回 502。
 
 ## API
 
@@ -112,9 +113,11 @@ server/index.ts (Express + TypeScript)
 | GET | `/api/datasets` | 内置数据集元信息 |
 | GET | `/api/datasets/:id` | 单个数据集元信息 |
 | POST | `/api/datasets/upload` | multipart `file=<csv>` |
-| POST | `/api/chat` | `{ "datasetId": "...", "question": "..." }` |
+| POST | `/api/chat` | `{ "datasetId": "...", "question": "...", "history": [...] }`；返回 `kind: "chat" \| "chart"`，未配置 503、调用失败 502 |
 
 ## 示例问题
+
+需要图表：
 
 - 画出 Bearing1_1 的 RMS 随文件序号变化
 - 按工况对比 RMS 分布
@@ -124,6 +127,14 @@ server/index.ts (Express + TypeScript)
 - 画出六类缺陷的 mAP50 柱状图
 - 画学习率×损失函数的测试准确率热力图
 - 画互信息 Top 15 特征条形图
+
+不需要图表（同样走在线模型）：
+
+- 你好，介绍一下你能做什么
+- 这份数据有哪些字段，分别是什么意思
+- RUL 的 R² 为负说明什么
+- 为什么 RNN/LSTM 准确率高但 macroF1 很低
+- 六类缺陷里哪类最难检测，可能的原因是什么
 
 ## 测试与类型检查
 

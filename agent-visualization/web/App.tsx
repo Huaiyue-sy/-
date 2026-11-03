@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
 import type { EChartsOption } from 'echarts';
+import ChartView, { type ChartHandle } from './ChartView';
 import type { ChatMessage, ChatResponse, DatasetMeta, HealthInfo } from './types';
 
 const API = '/api';
@@ -63,17 +63,31 @@ function Icon({ name }: { name: 'spark' | 'database' | 'upload' | 'chart' | 'sen
   }
 }
 
-function PlannerBadge({ planner }: { planner?: 'llm' | 'rules' }) {
+function PlannerBadge({ planner, kind = 'chart' }: { planner?: 'llm'; kind?: 'chart' | 'chat' }) {
   if (!planner) return null;
   return (
-    <span className={`badge ${planner}`}>
-      {planner === 'llm' ? 'LLM 规划' : '规则引擎'}
+    <span className="badge llm">
+      {kind === 'chat' ? '在线模型 · 回答' : '在线模型 · 图表'}
     </span>
   );
 }
 
 function formatCount(n: number): string {
   return n.toLocaleString('zh-CN');
+}
+
+async function postJson(path: string, body: unknown): Promise<Response> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+  try {
+    return await fetch(`${API}${path}`, init);
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return fetch(`${API}${path}`, init);
+  }
 }
 
 export default function App() {
@@ -86,10 +100,17 @@ export default function App() {
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [view, setView] = useState<'home' | 'workspace'>('home');
   const fileRef = useRef<HTMLInputElement>(null);
-  const chartRef = useRef<ReactECharts>(null);
+  const chartRef = useRef<ChartHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const autoAsked = useRef(false);
+  const sessionRef = useRef(0);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const active = datasets.find((d) => d.id === activeId);
 
@@ -121,53 +142,104 @@ export default function App() {
   }, [datasets]);
 
   const selectDataset = (id: string) => {
+    sessionRef.current += 1;
+    messagesRef.current = [];
     setActiveId(id);
     setMessages([]);
     setChart(null);
     setError('');
+    setLoading(false);
   };
 
-  const ask = useCallback(async (question: string) => {
+  const ask = useCallback(async (question: string, datasetId: string = activeId) => {
     const q = question.trim();
-    if (!q || !activeId || loading) return;
+    if (!q || !datasetId) return;
+    const session = sessionRef.current;
+    const history = messagesRef.current
+      .filter((message) => (message.role === 'user' || Boolean(message.planner)) && !message.text.startsWith('回答失败'))
+      .slice(-8)
+      .map((message) => ({ role: message.role, content: message.text }));
     setMessages((prev) => [...prev, { id: uid(), role: 'user', text: q }]);
     setInput('');
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datasetId: activeId, question: q }),
+      const response = await postJson('/chat', {
+        datasetId,
+        question: q,
+        history,
       });
       const data = await response.json();
+      if (session !== sessionRef.current) return;
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
       const result = data as ChatResponse;
+      if (result.kind === 'chat') {
+        setMessages((prev) => [...prev, {
+          id: uid(),
+          role: 'assistant',
+          kind: 'chat',
+          text: result.answer,
+          planner: result.planner,
+          warning: result.warning,
+        }]);
+        return;
+      }
+      if (!result.spec || !result.option) throw new Error('返回的图表数据不完整');
       setChart(result);
       setMessages((prev) => [...prev, {
         id: uid(),
         role: 'assistant',
+        kind: 'chart',
         text: result.answer,
         planner: result.planner,
         warning: result.warning,
         summary: result.summary,
       }]);
     } catch (err) {
+      if (session !== sessionRef.current) return;
       setMessages((prev) => [...prev, {
         id: uid(),
         role: 'assistant',
-        text: `生成失败：${err instanceof Error ? err.message : String(err)}`,
+        text: `回答失败：${err instanceof Error ? err.message : String(err)}`,
       }]);
     } finally {
-      setLoading(false);
+      if (session === sessionRef.current) setLoading(false);
     }
-  }, [activeId, loading]);
+  }, [activeId]);
+
+  const startConversation = useCallback((datasetId: string, question: string) => {
+    const q = question.trim();
+    if (!datasetId || !q) return;
+    sessionRef.current += 1;
+    messagesRef.current = [];
+    setActiveId(datasetId);
+    setMessages([]);
+    setChart(null);
+    setError('');
+    setInput('');
+    setLoading(false);
+    setView('workspace');
+    void ask(q, datasetId);
+  }, [ask]);
+
+  const newConversation = () => {
+    sessionRef.current += 1;
+    messagesRef.current = [];
+    setMessages([]);
+    setChart(null);
+    setError('');
+    setInput('');
+    setLoading(false);
+    window.history.replaceState(null, '', window.location.pathname);
+    setView('home');
+  };
 
   useEffect(() => {
     const question = new URLSearchParams(window.location.search).get('q');
     if (question && activeId && !autoAsked.current) {
       autoAsked.current = true;
-      void ask(question);
+      setView('workspace');
+      void ask(question, activeId);
     }
   }, [activeId, ask]);
 
@@ -198,14 +270,146 @@ export default function App() {
   };
 
   const exportPng = () => {
-    const instance = chartRef.current?.getEchartsInstance();
+    const instance = chartRef.current?.getInstance();
     if (!instance || !chart) return;
-    const url = instance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#07111e' });
+    const url = instance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${(chart.spec.title || 'chart').replace(/[\\/:*?"<>|]/g, '_')}.png`;
+    link.download = `${(chart.spec?.title || 'chart').replace(/[\\/:*?"<>|]/g, '_')}.png`;
     link.click();
   };
+
+  if (view === 'home') {
+    return (
+      <div className="home">
+        <header className="home-top">
+          <div className="brand home-brand">
+            <span className="brand-mark"><Icon name="spark" /></span>
+            <div>
+              <strong>工业数据分析智能体</strong>
+              <span>Visualization Agent</span>
+            </div>
+          </div>
+          <div className="home-status">
+            <span className={`status-dot ${health?.llm.configured ? 'online' : 'missing'}`} />
+            {health?.llm.configured ? `在线模型 · ${health.llm.model}` : '未配置在线模型'}
+          </div>
+        </header>
+
+        <main className="home-main">
+          <section className="home-hero">
+            <span className="hero-mark"><Icon name="spark" /></span>
+            <h1>选好数据，直接提问</h1>
+            <p>选择一份数据集，用自然语言描述你想看的内容；智能体会判断该出图还是用文字回答。</p>
+          </section>
+
+          {error && <div className="error-banner">{error}</div>}
+
+          <section className="home-block">
+            <div className="home-block-head">
+              <h2>1. 选择数据</h2>
+              <span>{datasets.length > 0 ? `${datasets.length} 个可用数据集` : '加载中…'}</span>
+            </div>
+
+            {groups.map(([group, items]) => (
+              <div className="home-group" key={group}>
+                <div className="home-group-title">{group}</div>
+                <div className="home-datasets">
+                  {items.map((dataset) => (
+                    <button
+                      type="button"
+                      key={dataset.id}
+                      className={`dataset-card ${dataset.id === activeId ? 'active' : ''}`}
+                      onClick={() => selectDataset(dataset.id)}
+                    >
+                      <span className="dataset-icon"><Icon name="database" /></span>
+                      <span className="dataset-card-body">
+                        <span className="dataset-card-name">
+                          {dataset.name}
+                          {dataset.sample && <em>抽样</em>}
+                        </span>
+                        <span className="dataset-card-meta">
+                          {formatCount(dataset.rowCount)} 行 · {dataset.columns.length} 列
+                        </span>
+                        {dataset.description && <span className="dataset-card-desc">{dataset.description}</span>}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div
+              className={`home-upload ${uploading ? 'busy' : ''}`}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void handleFiles(event.dataTransfer.files);
+              }}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+                onChange={(event) => void handleFiles(event.target.files)}
+              />
+              <Icon name="upload" />
+              <div>
+                <strong>{uploading ? '正在解析…' : '上传自己的 CSV'}</strong>
+                <span>拖拽文件到这里，或选择本地文件</span>
+              </div>
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                选择文件
+              </button>
+            </div>
+          </section>
+
+          <section className="home-block">
+            <div className="home-block-head">
+              <h2>2. 输入问题</h2>
+              <span>{active ? `${active.name} · ${formatCount(active.rowCount)} 行` : '请先选择数据'}</span>
+            </div>
+            <form
+              className="home-composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                startConversation(activeId, input);
+              }}
+            >
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder={active
+                  ? `例如：${active.suggestedQuestions[0] ?? '画出数据的主要分布'}`
+                  : '选择数据后，在这里输入问题'}
+                disabled={!active || loading}
+                autoFocus
+              />
+              <button type="submit" disabled={!activeId || !input.trim() || loading}>
+                <Icon name="send" />
+                开始分析
+              </button>
+            </form>
+            {active && active.suggestedQuestions.length > 0 && (
+              <div className="home-suggestions">
+                {active.suggestedQuestions.map((question) => (
+                  <button
+                    type="button"
+                    key={question}
+                    onClick={() => startConversation(activeId, question)}
+                    disabled={loading}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -213,7 +417,7 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark"><Icon name="spark" /></span>
           <div>
-            <strong>工业数据可视化</strong>
+            <strong>工业数据分析智能体</strong>
             <span>Visualization Agent</span>
           </div>
         </div>
@@ -271,10 +475,10 @@ export default function App() {
         </div>
 
         <div className="sidebar-foot">
-          <span className={`status-dot ${health?.llm.configured ? 'online' : 'offline'}`} />
+          <span className={`status-dot ${health?.llm.configured ? 'online' : 'missing'}`} />
           <div>
-            <strong>{health?.llm.configured ? 'LLM 已配置' : '规则引擎'}</strong>
-            <span>{health?.llm.configured ? `${health.llm.model} · 失败自动降级` : '完全离线运行'}</span>
+            <strong>{health?.llm.configured ? '在线模型已接入' : '未配置在线模型'}</strong>
+            <span>{health?.llm.configured ? health.llm.model : '请配置 VIZ_LLM_API_KEY / DEEPSEEK_API_KEY'}</span>
           </div>
         </div>
       </aside>
@@ -286,7 +490,7 @@ export default function App() {
             <p>{active?.description ?? '从左侧选择内置数据，或上传一份 CSV。'}</p>
           </div>
           <div className="topbar-actions">
-            <button type="button" className="ghost-button" onClick={() => { setMessages([]); setChart(null); setError(''); }}>
+            <button type="button" className="ghost-button" onClick={newConversation}>
               <Icon name="plus" /> 新对话
             </button>
           </div>
@@ -300,8 +504,8 @@ export default function App() {
               {messages.length === 0 && (
                 <div className="hero">
                   <span className="hero-mark"><Icon name="chart" /></span>
-                  <h2>用一句话，把数据变成图</h2>
-                  <p>选择一个数据集，直接问“画出……”“对比……”“按……分布”。后端会先让大模型生成图表规格，字段不合法时自动改用规则引擎。</p>
+                  <h2>问数据，也聊思路</h2>
+                  <p>在左侧选择数据集后，输入问题即可。</p>
                   {active && (
                     <div className="hero-facts">
                       <span>{formatCount(active.rowCount)} 行</span>
@@ -314,10 +518,12 @@ export default function App() {
 
               {messages.map((message) => (
                 <div className={`message ${message.role}`} key={message.id}>
-                  <div className="avatar">{message.role === 'user' ? '你' : 'A'}</div>
+                  <div className="avatar">
+                    {message.role === 'user' ? '你' : <Icon name="spark" />}
+                  </div>
                   <div className="bubble-wrap">
                     <div className="bubble">
-                      {message.role === 'assistant' && <PlannerBadge planner={message.planner} />}
+                      {message.role === 'assistant' && <PlannerBadge planner={message.planner} kind={message.kind} />}
                       <p>{message.text}</p>
                       {message.summary && <div className="message-summary">{message.summary}</div>}
                       {message.warning && <div className="message-warning">{message.warning}</div>}
@@ -328,10 +534,10 @@ export default function App() {
 
               {loading && (
                 <div className="message assistant">
-                  <div className="avatar">A</div>
+                  <div className="avatar"><Icon name="spark" /></div>
                   <div className="bubble thinking">
                     <span /><span /><span />
-                    <em>正在理解问题并生成图表规格…</em>
+                    <em>正在理解问题…</em>
                   </div>
                 </div>
               )}
@@ -367,7 +573,7 @@ export default function App() {
                   <span>图表</span>
                   {chart && <PlannerBadge planner={chart.planner} />}
                 </div>
-                <h2>{chart?.spec.title ?? '等待生成'}</h2>
+                <h2>{chart?.spec?.title ?? '等待生成'}</h2>
                 {chart && <p>{chart.summary}</p>}
               </div>
               {chart && (
@@ -378,26 +584,23 @@ export default function App() {
             </div>
 
             <div className="chart-body">
-              {chart ? (
-                <ReactECharts
+              {chart?.option ? (
+                <ChartView
                   ref={chartRef}
                   option={chart.option as EChartsOption}
-                  notMerge
-                  lazyUpdate
-                  style={{ width: '100%', height: '100%' }}
                 />
               ) : (
                 <div className="chart-empty">
                   <span className="empty-mark"><Icon name="chart" /></span>
-                  <strong>第一张图，等你发问</strong>
-                  <p>试试左侧数据集自带的建议问题，或上传自己的 CSV。</p>
+                  <strong>图表会出现在这里</strong>
+                  <p>模型判断需要可视化时会自动出图；纯文字回答只看左侧对话即可。</p>
                 </div>
               )}
             </div>
 
-            {chart && (
+            {chart?.spec && (
               <div className="chart-foot">
-                <span>使用 {formatCount(chart.usedRows)} 行</span>
+                <span>使用 {formatCount(chart.usedRows ?? 0)} 行</span>
                 <span>{chart.spec.x ? `x = ${chart.spec.x}` : '无 x 字段'}</span>
                 <span>
                   {Array.isArray(chart.spec.y) ? `y = ${chart.spec.y.join(' / ')}` : (chart.spec.y ? `y = ${chart.spec.y}` : '按记录数统计')}

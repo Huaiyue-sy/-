@@ -237,27 +237,28 @@ function suggestionsFor(id: string): string[] {
         '画出 Bearing1_1 的 RMS 随文件序号变化',
         '按工况对比 RMS 分布',
         '各健康阶段样本占比',
+        '健康阶段和相对 RUL 是怎么定义的？',
       ];
     case 'bearing_models':
-      return ['对比各模型的测试准确率和 macroF1', '按模型画测试准确率柱状图'];
+      return ['对比各模型的测试准确率和 macroF1', '按模型画测试准确率柱状图', '哪个模型综合表现最好？'];
     case 'classify_health':
-      return ['对比四个模型的测试准确率和 macroF1', '各模型的 CV 准确率'];
+      return ['对比四个模型的测试准确率和 macroF1', '各模型的 CV 准确率', 'CV 和留出测试指标有什么区别？'];
     case 'cnn_lstm_rf':
-      return ['对比 CNN、LSTM、RF 的测试准确率', 'CNN 与随机森林的 macroF1'];
+      return ['对比 CNN、LSTM、RF 的测试准确率', 'CNN 与随机森林的 macroF1', '为什么 LSTM 的 macroF1 偏低？'];
     case 'rul_models':
-      return ['对比 RUL 模型的测试 MAE 和 RMSE', '各模型的测试 R²'];
+      return ['对比 RUL 模型的测试 MAE 和 RMSE', '各模型的测试 R²', 'RUL 的 R² 为负说明什么？'];
     case 'feature_ranking':
-      return ['画互信息 Top 15 特征条形图', '哪些特征排在前面？'];
+      return ['画互信息 Top 15 特征条形图', '哪些特征排在前面？', '互信息和 ANOVA 有什么区别？'];
     case 'neu_models':
-      return ['对比 ResNet18 与 EfficientNet-B0 的测试准确率', '预训练与从零训练的准确率对比'];
+      return ['对比 ResNet18 与 EfficientNet-B0 的测试准确率', '预训练与从零训练的准确率对比', '迁移学习和从零训练差多少？'];
     case 'yolo_per_class':
-      return ['画出六类缺陷的 mAP50 柱状图', '哪类缺陷的召回率最低？'];
+      return ['画出六类缺陷的 mAP50 柱状图', '哪类缺陷的召回率最低？', '哪类缺陷最难检测，为什么？'];
     case 'optimization':
-      return ['画学习率×损失函数的测试准确率热力图', '对比不同学习率的测试准确率'];
+      return ['画学习率×损失函数的测试准确率热力图', '对比不同学习率的测试准确率', '这组消融实验说明了什么？'];
     case 'yolo_overall':
-      return ['YOLO 的 mAP50 和 mAP50-95', 'YOLO 的精确率和召回率'];
+      return ['YOLO 的 mAP50 和 mAP50-95', 'YOLO 的精确率和召回率', '这些检测指标各自代表什么？'];
     default:
-      return ['按第一个类别列统计数量', '画第一个数值列的分布', '选择两个数值列做散点图'];
+      return ['按第一个类别列统计数量', '画第一个数值列的分布', '选择两个数值列做散点图', '这些字段分别是什么意思？'];
   }
 }
 

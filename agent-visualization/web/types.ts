@@ -34,22 +34,24 @@ export interface ChartSpec {
 }
 
 export interface ChatResponse {
+  kind: 'chart' | 'chat';
   answer: string;
-  spec: ChartSpec;
-  option: Record<string, unknown>;
-  planner: 'llm' | 'rules';
+  spec?: ChartSpec;
+  option?: Record<string, unknown>;
+  planner?: 'llm';
   warning?: string;
-  summary: string;
-  usedRows: number;
-  preview: { columns: string[]; rows: Record<string, string | number | null>[] };
-  dataset: { id: string; name: string; rowCount: number };
+  summary?: string;
+  usedRows?: number;
+  preview?: { columns: string[]; rows: Record<string, string | number | null>[] };
+  dataset?: { id: string; name: string; rowCount: number };
 }
 
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  planner?: 'llm' | 'rules';
+  kind?: 'chart' | 'chat';
+  planner?: 'llm';
   warning?: string;
   summary?: string;
   pending?: boolean;

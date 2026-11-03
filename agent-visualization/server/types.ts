@@ -58,15 +58,3 @@ export interface ChartBuildResult {
   usedRows: number;
   warning?: string;
 }
-
-export interface ChatResult {
-  answer: string;
-  spec: ChartSpec;
-  option: Record<string, unknown>;
-  planner: 'llm' | 'rules';
-  warning?: string;
-  summary: string;
-  usedRows: number;
-  preview: { columns: string[]; rows: Row[] };
-  dataset: { id: string; name: string; rowCount: number };
-}

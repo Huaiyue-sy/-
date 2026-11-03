@@ -5,8 +5,7 @@ import cors from 'cors';
 import multer from 'multer';
 import { addUpload, APP_DIR, getDataset, listDatasets, toMeta } from './datasets';
 import { buildChart } from './chart';
-import { rulePlan } from './planner';
-import { getLlmConfig, llmConfigured, planChart } from './llm';
+import { getLlmConfig, llmConfigured, normalizeHistory, replyWithLlm } from './llm';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
@@ -33,7 +32,7 @@ app.get('/api/health', (_req, res) => {
     service: 'industrial-viz-agent',
     llm: {
       configured: llmConfigured(),
-      mode: llmConfigured() ? 'openai-compatible' : 'rules-only',
+      mode: llmConfigured() ? 'online' : 'unconfigured',
       model: config.model,
       baseUrl: config.baseUrl,
     },
@@ -68,8 +67,16 @@ app.post('/api/datasets/upload', upload.single('file'), (req, res) => {
   }
 });
 
+function llmFailureReason(message: string): string {
+  if (message.startsWith('HTTP 401')) return '在线模型未授权（401）';
+  if (message.startsWith('HTTP 402')) return '在线模型额度不足（402）';
+  if (message.startsWith('HTTP 429')) return '在线模型请求过于频繁（429）';
+  if (/abort|timeout/i.test(message)) return '在线模型响应超时';
+  return '在线模型暂时不可用';
+}
+
 app.post('/api/chat', async (req, res) => {
-  const { datasetId, question } = req.body ?? {};
+  const { datasetId, question, history } = req.body ?? {};
   if (typeof datasetId !== 'string' || typeof question !== 'string' || !question.trim()) {
     res.status(400).json({ error: '需要 datasetId 和非空 question' });
     return;
@@ -83,30 +90,74 @@ app.post('/api/chat', async (req, res) => {
     res.status(404).json({ error: '数据集不存在，请重新选择或上传' });
     return;
   }
+
+  const text = question.trim();
+  const meta = {
+    id: dataset.id,
+    name: dataset.name,
+    rowCount: dataset.rows.length,
+  };
+
+  if (!llmConfigured()) {
+    res.status(503).json({
+      error: '未配置在线模型，请在 agent-visualization/.env 或项目根目录 .env 中配置 VIZ_LLM_API_KEY / DEEPSEEK_API_KEY。',
+    });
+    return;
+  }
+
   try {
-    const plan = await planChart(dataset, question.trim(), rulePlan);
-    const built = buildChart(dataset, plan.spec);
+    const turns = normalizeHistory(history);
+    const last = turns[turns.length - 1];
+    if (last && last.role === 'user' && last.content === text) turns.pop();
+    const result = await replyWithLlm(dataset, text, turns);
+
+    if (!result.spec) {
+      res.json({
+        kind: 'chat',
+        answer: result.reply,
+        planner: 'llm',
+        warning: result.chartWarning,
+        dataset: meta,
+      });
+      return;
+    }
+
+    let built;
+    try {
+      built = buildChart(dataset, result.spec);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      res.json({
+        kind: 'chat',
+        answer: result.reply,
+        planner: 'llm',
+        warning: `图表生成失败，已改为文字回答：${message}`,
+        dataset: meta,
+      });
+      return;
+    }
+
     res.json({
-      answer: plan.spec.explanation || `已生成${plan.spec.title}。`,
-      spec: plan.spec,
+      kind: 'chart',
+      answer: result.reply,
+      spec: result.spec,
       option: built.option,
-      planner: plan.planner,
-      warning: plan.warning || built.warning,
+      planner: 'llm',
+      warning: result.chartWarning || built.warning,
       summary: built.summary,
       usedRows: built.usedRows,
       preview: {
         columns: dataset.columns.map((c) => c.name),
         rows: dataset.rows.slice(0, 8),
       },
-      dataset: {
-        id: dataset.id,
-        name: dataset.name,
-        rowCount: dataset.rows.length,
-      },
+      dataset: meta,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ error: `生成图表失败：${message}` });
+    console.warn(`[viz-agent] 在线模型调用失败：${message.slice(0, 200)}`);
+    res.status(502).json({
+      error: `${llmFailureReason(message)}，请检查网络、密钥和模型配置后重试。`,
+    });
   }
 });
 
@@ -128,6 +179,6 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
 });
 
 app.listen(PORT, () => {
-  const mode = llmConfigured() ? `LLM ${getLlmConfig().model}` : '规则引擎';
+  const mode = llmConfigured() ? `在线模型 ${getLlmConfig().model}` : '未配置在线模型（提问将报错）';
   console.log(`[viz-agent] http://localhost:${PORT}  (${mode})`);
 });

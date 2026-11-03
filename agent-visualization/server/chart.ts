@@ -1,11 +1,11 @@
 import type { ChartBuildResult, ChartSpec, ColumnProfile, Dataset, Row } from './types';
 import { pretty } from './labels';
 
-const COLORS = ['#46c8ff', '#ff7a90', '#ffd166', '#39d98a', '#a78bfa', '#ff9f5a', '#5eead4', '#f472b6'];
-const AXIS_LABEL = '#93aec7';
-const AXIS_LINE = '#294862';
-const SPLIT_LINE = 'rgba(41,72,98,.55)';
-const TEXT = '#e6f1fb';
+const COLORS = ['#4d9868', '#3b81e9', '#efb041', '#605ce5', '#0b7f78', '#ea873f', '#da5597', '#8e8c98'];
+const AXIS_LABEL = '#838280';
+const AXIS_LINE = '#d5dbd8';
+const SPLIT_LINE = 'rgba(20,20,20,.07)';
+const TEXT = '#141414';
 
 type Value = string | number | null;
 
@@ -100,11 +100,11 @@ function baseOption(spec: ChartSpec): Record<string, unknown> {
     },
     tooltip: {
       trigger: spec.type === 'pie' || spec.type === 'scatter' ? 'item' : 'axis',
-      backgroundColor: 'rgba(8, 20, 34, .94)',
+      backgroundColor: 'rgba(255, 255, 255, .98)',
       borderColor: AXIS_LINE,
       borderWidth: 1,
       textStyle: { color: TEXT, fontSize: 12 },
-      axisPointer: { type: spec.type === 'bar' ? 'shadow' : 'line', lineStyle: { color: '#46c8ff66' } },
+      axisPointer: { type: spec.type === 'bar' ? 'shadow' : 'line', lineStyle: { color: '#4d986866' } },
     },
     legend: {
       top: 12,
@@ -216,7 +216,19 @@ function buildLine(spec: ChartSpec, dataset: Dataset, rows: Row[]): ChartBuildRe
   if (categories.length > 80) {
     option.dataZoom = [
       { type: 'inside', start: 0, end: 100 },
-      { type: 'slider', height: 14, bottom: 16, borderColor: AXIS_LINE, fillerColor: 'rgba(70,200,255,.12)', textStyle: { color: AXIS_LABEL } },
+      {
+        type: 'slider',
+        height: 14,
+        bottom: 16,
+        borderColor: '#e6e6e6',
+        backgroundColor: '#f6f6f6',
+        fillerColor: 'rgba(77,152,104,.12)',
+        handleStyle: { color: '#ffffff', borderColor: '#4d9868' },
+        moveHandleStyle: { color: '#4d9868' },
+        dataBackground: { lineStyle: { color: '#b3ddc2' }, areaStyle: { color: '#e2f2e9' } },
+        selectedDataBackground: { lineStyle: { color: '#4d9868' }, areaStyle: { color: '#c2e4d0' } },
+        textStyle: { color: AXIS_LABEL },
+      },
     ];
     (option.grid as Record<string, unknown>).bottom = 78;
   }
@@ -341,8 +353,8 @@ function buildBoxplot(spec: ChartSpec, dataset: Dataset, rows: Row[]): ChartBuil
     type: 'boxplot',
     data: entries.map((e) => e.box),
     boxWidth: ['18%', '42%'],
-    itemStyle: { color: 'rgba(70,200,255,.18)', borderColor: '#46c8ff', borderWidth: 1.5 },
-    emphasis: { itemStyle: { borderColor: '#9be7ff' } },
+    itemStyle: { color: 'rgba(77,152,104,.14)', borderColor: '#4d9868', borderWidth: 1.5 },
+    emphasis: { itemStyle: { borderColor: '#316e50' } },
   }];
   return {
     option,
@@ -446,7 +458,7 @@ function buildHeatmap(spec: ChartSpec, dataset: Dataset, rows: Row[]): ChartBuil
     ...(option.xAxis as Record<string, unknown>),
     type: 'category',
     data: xs,
-    splitArea: { show: true, areaStyle: { color: ['rgba(18,38,58,.35)', 'rgba(12,28,44,.35)'] } },
+    splitArea: { show: true, areaStyle: { color: ['rgba(20,20,20,.015)', 'rgba(20,20,20,.035)'] } },
   };
   option.yAxis = {
     type: 'category',
@@ -454,7 +466,7 @@ function buildHeatmap(spec: ChartSpec, dataset: Dataset, rows: Row[]): ChartBuil
     axisLine: { lineStyle: { color: AXIS_LINE } },
     axisTick: { show: false },
     axisLabel: { color: AXIS_LABEL, fontSize: 11 },
-    splitArea: { show: true, areaStyle: { color: ['rgba(18,38,58,.35)', 'rgba(12,28,44,.35)'] } },
+    splitArea: { show: true, areaStyle: { color: ['rgba(20,20,20,.015)', 'rgba(20,20,20,.035)'] } },
   };
   option.legend = { show: false };
   option.grid = { left: 24, right: 28, top: 48, bottom: 84, containLabel: true };
@@ -470,13 +482,13 @@ function buildHeatmap(spec: ChartSpec, dataset: Dataset, rows: Row[]): ChartBuil
     itemHeight: 120,
     text: ['高', '低'],
     textStyle: { color: AXIS_LABEL },
-    inRange: { color: ['#e6f7ff', '#9be7ff', '#46c8ff', '#ffd166'] },
+    inRange: { color: ['#f4faf6', '#e2f2e9', '#c2e4d0', '#94cdae', '#5aa98c'] },
   };
   option.series = [{
     name: pretty(yCol.name),
     type: 'heatmap',
     data,
-    label: { show: data.length <= 30, color: '#082033', fontSize: 10, formatter: (p: { value: number[] }) => String(p.value[2]) },
+    label: { show: data.length <= 30, color: '#10231b', fontSize: 10, formatter: (p: { value: number[] }) => String(p.value[2]) },
     emphasis: { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,.45)' } },
   }];
   return {
@@ -555,7 +567,7 @@ function buildHistogram(spec: ChartSpec, dataset: Dataset, rows: Row[]): ChartBu
     type: 'bar',
     data: counts,
     barMaxWidth: 30,
-    itemStyle: { borderRadius: [3, 3, 0, 0], color: '#46c8ff' },
+    itemStyle: { borderRadius: [3, 3, 0, 0], color: '#4d9868' },
   }];
   return {
     option,
