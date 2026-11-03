@@ -1,0 +1,5 @@
+model,params_m,pretrained,test_acc,macroF1
+ResNet18,11.7,1,0.9944,0.9944
+EfficientNet-B0,5.3,1,0.9889,0.9889
+ResNet18-scratch,11.7,0,0.8944,0.8944
+EfficientNet-B0-scratch,5.3,0,0.9944,0.9944

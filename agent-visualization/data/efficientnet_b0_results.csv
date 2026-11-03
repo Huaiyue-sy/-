@@ -1,0 +1,2 @@
+﻿arch,lr,loss,epochs,img_size,pretrained,device,train_sec,sec_per_epoch,best_val_acc,test_acc,test_macroP,test_macroR,test_macroF1
+efficientnet_b0,0.001,CE,15,224,True,mps,347.2,23.15,1.0,0.9888888888888889,0.989068100358423,0.9888888888888889,0.9888873452502239

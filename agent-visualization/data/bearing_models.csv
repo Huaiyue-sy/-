@@ -1,0 +1,8 @@
+model,test_acc,test_macroF1
+RandomForest,0.7820,0.7202
+SVM-RBF,0.4541,0.3926
+KNN,0.7122,0.6264
+LogisticRegression,0.8950,0.6690
+CNN1D,0.8169,0.3143
+RNN,0.8347,0.3033
+LSTM,0.8347,0.3033

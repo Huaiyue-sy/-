@@ -1,0 +1,2 @@
+﻿arch,lr,loss,epochs,img_size,pretrained,device,train_sec,sec_per_epoch,best_val_acc,test_acc,test_macroP,test_macroR,test_macroF1
+resnet18,0.001,CE,15,224,True,mps,193.6,12.9,0.95,0.9944444444444445,0.9946236559139785,0.9944444444444445,0.9944429008057795

@@ -11,6 +11,7 @@
 | NEU-DET 表面 | 六类瑕疵分类 | ResNet18 / EfficientNet-B0 迁移学习 | 准确率 **0.9944** / **0.9889** |
 | NEU-DET 表面 | 缺陷检测 | YOLOv8n 预训练微调 | mAP50 **0.7703**，mAP50-95 **0.4362** |
 | 智能体 | 设备运维诊断 / 视觉质检 | IsolationForest + 分类/RUL + RAG | 两个可离线演示的 CLI 智能体 |
+| 智能体 | 可视化智能体（TypeScript Web） | React + ECharts + OpenAI 兼容接口 | 自然语言生成 7 类图表，内置 10 个数据集 + CSV 上传 |
 
 | 缺陷检测（YOLOv8n） | 学习率 × 损失消融 |
 | :---: | :---: |
@@ -27,6 +28,7 @@
 │   ├── week2-3-surface-defect/  # NEU-DET 探索、ResNet/EfficientNet、YOLO、消融
 │   ├── agent-maintenance/       # 设备运维诊断智能体
 │   └── agent-inspection/        # 视觉质检智能体（SQLite 台账 + RAG + 预警）
+├── agent-visualization/         # TypeScript 可视化智能体（React + Vite + ECharts + Express）
 ├── scripts/smoke_test.sh        # 合成小数据全链路自检（18 个入口脚本）
 ├── config/                      # 轴承几何参数
 ├── docs/                        # 实训指南与规划思维导图
@@ -110,6 +112,24 @@ bash scripts/smoke_test.sh
 
 > 智能体依赖 `models/` 下的分类、RUL 与 ResNet 权重（如 `week1_classifier.joblib`、`resnet18_neu.pth`）。这些文件体积较大且不入库，请先按上一节命令训练生成，或把本机 `models/` 目录复制过来。
 
+## 可视化智能体（TypeScript Web）
+
+第三个智能体用自然语言生成图表：选择内置实训结果或上传 CSV，输入“画出 Bearing1_1 的 RMS 随文件序号变化”“对比各模型的准确率和 macroF1”“画学习率×损失热力图”等，浏览器直接出图并可导出 PNG。
+
+![可视化智能体](agent-visualization/assets/demo.png)
+
+```bash
+cd agent-visualization
+npm install
+cp .env.example .env   # 可选：填入 OpenAI 兼容 key；不配也能用规则引擎
+npm run dev            # 前端 http://localhost:5173，后端 http://localhost:8787
+```
+
+- 内置 10 个实训结果数据集；完整 `features.csv` 存在时自动使用 9216 行全量数据，否则退回 600 行抽样快照。
+- 服务端先调 OpenAI 兼容模型生成受 zod 约束的图表规格，失败或字段不合法时自动切换规则引擎。
+- API key 只保留在服务端 `.env`，不会进入前端或 Git。
+- 详细说明见 [agent-visualization/README.md](agent-visualization/README.md)。
+
 ## 评估口径
 
 - 轴承任务默认 **按轴承留出**（Bearing1_4 / Bearing2_3 / Bearing3_2 测试），避免相邻文件泄漏；随机划分仅作对照。
@@ -122,6 +142,7 @@ bash scripts/smoke_test.sh
 - [实训手册](实训手册/)：12 天每日记录（目标、完成情况、问题与解决、次日计划）
 - [数据说明](data/README.md)：两个数据集的下载、目录布局与几何参数
 - [代码目录说明](src/README.md)：每个脚本的输入输出与用法
+- [可视化智能体](agent-visualization/README.md)：TypeScript Web 应用的结构、API 与使用说明
 
 ## 环境说明
 

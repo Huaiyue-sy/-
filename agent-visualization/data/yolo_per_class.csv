@@ -1,0 +1,7 @@
+class,instances,precision,recall,mAP50,mAP50_95
+crazing,141,0.617,0.320,0.418,0.137
+inclusion,178,0.709,0.831,0.873,0.509
+patches,187,0.801,0.936,0.947,0.636
+pitted_surface,87,0.767,0.679,0.786,0.444
+rolled_in_scale,121,0.608,0.636,0.666,0.343
+scratches,114,0.848,0.877,0.931,0.547

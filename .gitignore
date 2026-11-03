@@ -49,3 +49,8 @@ config/*.env
 config/*.key
 secrets.*
 *.pem
+
+# Node / 可视化智能体
+node_modules/
+agent-visualization/web/dist/
+agent-visualization/uploads/
