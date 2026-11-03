@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common.bearing import BearingGeometry
+from common.confirm import confirm_offline
 
 from diagnose import MaintenanceAgent
 from llm import DeepSeekClient, llm_backend_name
@@ -114,8 +115,12 @@ def main() -> None:
             facts = diagnosis_facts(last_diagnosis, last_condition)
             reply = llm.chat(ASK_SYSTEM_PROMPT,
                              f"最近诊断事实：\n{facts}\n\n工人提问：{question}")
-            print("\nAgent> " + (reply or
-                  "（离线模式不支持自由问答；可参考最近诊断事实：）\n" + facts) + "\n")
+            if reply:
+                print("\nAgent> " + reply + "\n")
+            elif confirm_offline("自由问答需要在线大模型"):
+                print("\nAgent> （离线模式不支持自由问答；可参考最近诊断事实：）\n" + facts + "\n")
+            else:
+                print("\nAgent> 已取消离线回答。\n")
         else:
             print("未知命令，输入 /help 查看用法。")
 

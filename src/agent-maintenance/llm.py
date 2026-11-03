@@ -2,7 +2,7 @@
 
 优先调用 DeepSeek API（环境变量 DEEPSEEK_API_KEY；也支持读取项目根目录
 被 .gitignore 忽略的 .env 或 config/deepseek.env，兼容 DEEPSEEK_BASE_URL
-覆盖）；无 key 或调用失败时自动降级为内置规则模板生成诊断内容，保证离线可演示。
+覆盖）；无 key 或调用失败时返回空值，由调用方确认是否使用离线模板，不自动切换。
 """
 from __future__ import annotations
 
@@ -38,13 +38,13 @@ def _load_local_env() -> None:
 
 
 class DeepSeekClient:
-    def __init__(self, api_key: str | None = None, model: str = "deepseek-chat",
+    def __init__(self, api_key: str | None = None, model: str | None = None,
                  base_url: str | None = None, timeout: int = 60):
         _load_local_env()
         self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
         self.base_url = (base_url or os.environ.get("DEEPSEEK_BASE_URL")
                          or "https://api.deepseek.com").rstrip("/")
-        self.model = model
+        self.model = model or os.environ.get("DEEPSEEK_MODEL") or "deepseek-chat"
         self.timeout = timeout
 
     @property
@@ -53,17 +53,24 @@ class DeepSeekClient:
 
     def chat(self, system: str, user: str, temperature: float = 0.3,
              max_tokens: int = 1024) -> str | None:
-        """返回模型回复文本；失败返回 None（由调用方走离线降级）。"""
+        """返回模型回复文本；失败返回 None（由调用方确认是否使用离线模式）。"""
+        return self.chat_messages(
+            [{"role": "system", "content": system},
+             {"role": "user", "content": user}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    def chat_messages(self, messages: list[dict[str, str]], temperature: float = 0.3,
+                      max_tokens: int = 1024) -> str | None:
+        """多轮消息接口，供统一智能体保留对话上下文。"""
         if not self.available:
             return None
         import requests
 
         payload = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -76,7 +83,7 @@ class DeepSeekClient:
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
-            print(f"[LLM 调用失败，降级为离线规则模式] {type(e).__name__}: {e}")
+            print(f"[LLM 调用失败] {type(e).__name__}: {e}")
             return None
 
 

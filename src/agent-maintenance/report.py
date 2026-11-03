@@ -1,6 +1,7 @@
 """诊断报告生成：结构化报告的渲染、DeepSeek 提示词构造、离线规则降级。"""
 from __future__ import annotations
 
+from common.confirm import confirm_offline
 from diagnose import Diagnosis
 
 SEVERITY_BY_STAGE = {0: "正常", 1: "轻度退化", 2: "严重/故障"}
@@ -90,13 +91,17 @@ def offline_report(d: Diagnosis, condition: str) -> str:
     return "\n".join(md)
 
 
-def build_report(llm, d: Diagnosis, condition: str) -> str:
-    """优先大模型生成，失败降级离线规则。返回报告文本。"""
+def build_report(llm, d: Diagnosis, condition: str, allow_offline: bool | None = None) -> str:
+    """优先大模型生成；失败时先确认，确认后才使用离线规则引擎。"""
     facts = diagnosis_facts(d, condition)
     reply = llm.chat(REPORT_SYSTEM_PROMPT, f"诊断事实如下：\n\n{facts}\n\n请生成诊断报告。")
     if reply:
         return f"# 设备诊断报告（{llm_backend_text(llm)} 生成）\n\n{reply}"
-    return offline_report(d, condition)
+    if allow_offline is False:
+        return "在线报告生成失败，已按你的要求不使用离线模式。"
+    if allow_offline is True or confirm_offline("在线报告生成失败"):
+        return offline_report(d, condition)
+    return "已取消离线报告生成。"
 
 
 def llm_backend_text(llm) -> str:

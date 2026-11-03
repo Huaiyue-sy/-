@@ -8,6 +8,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$ROOT/.venv/bin/python"
 cd "$ROOT"
 
+# 自动化测试显式同意离线规则引擎，避免等待交互确认。
+export AGENT_OFFLINE_CONFIRM=yes
+
 SMOKE="$ROOT/data/_smoke"
 OUT="$ROOT/results/_smoke"
 MODEL="$ROOT/models/_smoke"
