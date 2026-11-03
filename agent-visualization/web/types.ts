@@ -114,4 +114,82 @@ export interface HealthInfo {
     python: string;
     confidence: number;
   };
+  dashboard?: {
+    configured: boolean;
+    devices: number;
+    webhook: boolean;
+    generatedAt: string | null;
+  };
+}
+
+export interface DashboardPoint {
+  fileIdx: number;
+  score: number;
+  level: number;
+  levelName: string;
+  stage: number;
+  stageName: string;
+  relRul: number;
+  rms: number;
+  kurtosis: number;
+  envPeak: number;
+  trend: string;
+  rmsRatio: number;
+  envRatio: number;
+  rmsScore: number;
+  kurtScore: number;
+  envScore: number;
+  stageScore: number;
+  rulScore: number;
+  explanation: string;
+  alertType: string;
+  alertMessage: string;
+}
+
+export interface DashboardAlert {
+  id: string;
+  fileIdx: number;
+  level: number;
+  levelName: string;
+  type: string;
+  message: string;
+}
+
+export interface DashboardDeviceSummary {
+  id: string;
+  name: string;
+  condition: string;
+  totalFiles: number;
+  fileIdx: number;
+  score: number;
+  level: number;
+  levelName: string;
+  stage: number;
+  stageName: string;
+  relRul: number;
+  trend: string;
+  rmsRatio: number;
+  envRatio: number;
+  alertCount: number;
+  latestAlerts: DashboardAlert[];
+}
+
+export interface DashboardSummary {
+  ok: boolean;
+  generatedAt: string;
+  summary: {
+    total: number;
+    healthy: number;
+    attention: number;
+    warning: number;
+    danger: number;
+  };
+  devices: DashboardDeviceSummary[];
+}
+
+export interface DashboardDeviceDetail {
+  ok: boolean;
+  device: DashboardDeviceSummary;
+  history: DashboardPoint[];
+  alerts: DashboardAlert[];
 }

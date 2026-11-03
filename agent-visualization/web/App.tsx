@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EChartsOption } from 'echarts';
 import ChartView, { type ChartHandle } from './ChartView';
+import Dashboard from './Dashboard';
 import type { ChatMessage, ChatResponse, DatasetMeta, HealthInfo, SessionRecord, VisionResponse } from './types';
 import { loadSessions, persistSessions } from './sessions';
 
@@ -302,7 +303,7 @@ export default function App() {
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
-  const [view, setView] = useState<'home' | 'workspace'>('home');
+  const [view, setView] = useState<'home' | 'workspace' | 'dashboard'>('home');
   const [vision, setVision] = useState<VisionResponse | null>(null);
   const [visionLoading, setVisionLoading] = useState(false);
   const [pendingImage, setPendingImage] = useState<File | null>(null);
@@ -710,6 +711,10 @@ export default function App() {
     link.click();
   };
 
+  if (view === 'dashboard') {
+    return <Dashboard onBack={() => setView('home')} />;
+  }
+
   if (view === 'home') {
     return (
       <div className="home">
@@ -722,6 +727,9 @@ export default function App() {
             </div>
           </div>
           <div className="home-status-group">
+            <button type="button" className="dash-entry" onClick={() => setView('dashboard')}>
+              <Icon name="chart" /> 设备看板
+            </button>
             <div className="home-status">
               <span className={`status-dot ${health?.llm.configured ? 'online' : 'missing'}`} />
               {health?.llm.configured ? `在线模型 · ${health.llm.model}` : '未配置在线模型'}
@@ -904,6 +912,9 @@ export default function App() {
             </p>
           </div>
           <div className="topbar-actions">
+            <button type="button" className="ghost-button" onClick={() => setView('dashboard')}>
+              <Icon name="chart" /> 设备看板
+            </button>
             <button type="button" className="ghost-button" onClick={newConversation}>
               <Icon name="plus" /> 新对话
             </button>

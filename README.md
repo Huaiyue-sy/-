@@ -95,6 +95,7 @@ bash scripts/smoke_test.sh
 /scan data/XJTU-SY_Bearing_Datasets/35Hz12kN/Bearing1_1/123.csv
 /report data/XJTU-SY_Bearing_Datasets/35Hz12kN/Bearing1_1/123.csv
 /ask 外圈故障应该怎么处理？
+/score Bearing1_4
 ```
 
 **视觉质检**（检测入库 → 自然语言查询 → 连续缺陷预警 → 工艺 RAG）：
@@ -147,6 +148,34 @@ npm run dev            # 前端 http://localhost:5173，后端 http://localhost:
 ```
 
 YOLO 检测需要项目根目录 `.venv/bin/python`（含 ultralytics）和 `results/week2_3/yolo/train/weights/best.pt`，默认自动发现。详细说明见 [agent-visualization/README.md](agent-visualization/README.md)。
+
+## 设备健康看板与推送
+
+在 Web 智能体里新增「设备看板」入口：把轴承特征表转换成 0–100 分的健康分、四级状态、趋势与告警，支持 SSE 实时推送、历史回放和机器人推送。
+
+```bash
+# 1) 生成评分（每个文件一行 + 每台设备摘要）
+.venv/bin/python src/agent-maintenance/score_devices.py
+
+# 2) 启动 Web 后点击首页右上角「设备看板」
+cd agent-visualization
+npm run dev
+```
+
+评分口径（可解释规则加权，不是新训练模型）：
+
+```text
+健康分 = 30%·RMS 得分 + 20%·峭度得分 + 20%·包络峰值得分
+       + 20%·健康阶段得分 + 10%·相对 RUL 得分
+级别：≥85 健康 / ≥70 注意 / ≥50 警告 / <50 危险
+基线：每台轴承前 20% 文件的稳健中位数
+```
+
+- 输出：`results/health_scores.csv`（9216 行，逐文件评分与告警）、`results/health_devices.json`（15 台设备最新状态）。
+- 看板：设备列表、分数环、阶段/RUL/RMS/包络倍数、健康分趋势、最近告警、评分依据、回放退化过程。
+- 实时推送：`GET /api/dashboard/stream`（SSE）；回放时推送 `update` / `alert` 事件。
+- 机器人推送：在 `agent-visualization/.env` 配置 `VIZ_ALERT_WEBHOOK`（钉钉/企业微信自定义机器人），点击「推送当前告警」或调用 `POST /api/dashboard/push`；未配置时返回 503，不伪造发送成功。
+- 全部 15 台轴承均为全寿命试验，末端状态多为“危险”；点击「回放退化过程」可查看从健康到失效的评分变化。
 
 ## 评估口径
 

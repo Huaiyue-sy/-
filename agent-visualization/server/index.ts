@@ -15,6 +15,17 @@ import {
   visionConfigured,
   visionInfo,
 } from './vision';
+import {
+  DashboardError,
+  dashboardInfo,
+  getDashboardDevice,
+  getDashboardSummary,
+  pushDeviceAlert,
+  refreshScores,
+  startDashboardReplay,
+  stopDashboardReplay,
+  subscribeDashboard,
+} from './dashboard';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
@@ -60,6 +71,7 @@ app.get('/api/health', (_req, res) => {
     },
     datasets: listDatasets().length,
     vision: visionInfo(),
+    dashboard: dashboardInfo(),
   });
 });
 
@@ -255,6 +267,78 @@ app.post('/api/vision/detect', imageUpload.single('file'), async (req, res) => {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[viz-agent] 缺陷检测失败：${message.slice(0, 200)}`);
     res.status(500).json({ error: `缺陷检测失败：${message}` });
+  }
+});
+
+function dashboardFailure(res: express.Response, error: unknown): void {
+  if (error instanceof DashboardError) {
+    res.status(error.status).json({ error: error.message });
+    return;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`[viz-agent] 看板服务异常：${message.slice(0, 200)}`);
+  res.status(500).json({ error: `看板服务异常：${message}` });
+}
+
+app.get('/api/dashboard/summary', async (_req, res) => {
+  try {
+    res.json(await getDashboardSummary());
+  } catch (error) {
+    dashboardFailure(res, error);
+  }
+});
+
+app.get('/api/dashboard/device/:id', async (req, res) => {
+  try {
+    const limit = Number(req.query.limit);
+    res.json(await getDashboardDevice(req.params.id, Number.isFinite(limit) ? limit : 400));
+  } catch (error) {
+    dashboardFailure(res, error);
+  }
+});
+
+app.get('/api/dashboard/stream', (_req, res) => {
+  subscribeDashboard(res);
+});
+
+app.post('/api/dashboard/replay', async (req, res) => {
+  try {
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+    if (!deviceId) {
+      res.status(400).json({ error: '需要 deviceId' });
+      return;
+    }
+    const intervalMs = Number(req.body?.intervalMs);
+    res.json(await startDashboardReplay(deviceId, Number.isFinite(intervalMs) ? intervalMs : 700));
+  } catch (error) {
+    dashboardFailure(res, error);
+  }
+});
+
+app.post('/api/dashboard/stop', (_req, res) => {
+  stopDashboardReplay();
+  res.json({ ok: true });
+});
+
+app.post('/api/dashboard/push', async (req, res) => {
+  try {
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+    if (!deviceId) {
+      res.status(400).json({ error: '需要 deviceId' });
+      return;
+    }
+    res.json(await pushDeviceAlert(deviceId));
+  } catch (error) {
+    dashboardFailure(res, error);
+  }
+});
+
+app.post('/api/dashboard/refresh', async (_req, res) => {
+  try {
+    const output = await refreshScores();
+    res.json({ ok: true, output, summary: await getDashboardSummary() });
+  } catch (error) {
+    dashboardFailure(res, error);
   }
 });
 

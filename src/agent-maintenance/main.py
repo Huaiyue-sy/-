@@ -9,6 +9,7 @@
     /scan <csv文件> [工况]     对单个振动文件执行完整诊断
     /report <csv文件> [工况]   生成结构化诊断报告（大模型或离线降级）
     /ask <问题>                结合最近一次诊断结果自由提问（大模型）
+    /score <轴承编号>          查看设备健康分、等级、趋势与最近告警
     /help /quit
 """
 from __future__ import annotations
@@ -22,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common.bearing import BearingGeometry
 from common.confirm import confirm_offline
+from common.health import LEVEL_NAMES, STAGE_NAMES, score_bearing
 
 from diagnose import MaintenanceAgent
 from llm import DeepSeekClient, llm_backend_name
@@ -104,6 +106,26 @@ def main() -> None:
             diag = agent.diagnose_file(rest[0], cond, BearingGeometry())
             last_diagnosis, last_condition = diag, cond
             print("\nAgent> " + build_report(llm, diag, cond) + "\n")
+        elif cmd == "/score":
+            if not rest:
+                print("用法：/score <轴承编号>，例如：/score Bearing1_1")
+                continue
+            points = score_bearing(agent.df, " ".join(rest))
+            if not points:
+                available = sorted(agent.df["bearing"].astype(str).unique())[:8]
+                print("未找到该轴承。可用示例：" + "、".join(available) + "\n")
+                continue
+            latest = points[-1]
+            print(f"\nAgent> 设备 {latest.bearing_key}（第 {latest.file_idx} 个文件，共 {len(points)} 个）")
+            print(f"  健康分：{latest.score:.2f} / 100（{LEVEL_NAMES[latest.level]}）")
+            print(f"  阶段：{STAGE_NAMES.get(latest.stage, '未知')}；相对 RUL：{latest.rel_rul:.2f}；趋势：{latest.trend}")
+            print(f"  评分依据：{latest.explanation}")
+            recent = [p for p in points if p.alert_message][-5:]
+            if recent:
+                print("  最近告警：")
+                for point in recent:
+                    print(f"    · 文件 {point.file_idx}（{point.level_name}）：{point.alert_message}")
+            print()
         elif cmd == "/ask":
             if not rest:
                 print("用法：/ask <问题>，例如：/ask 还能坚持多久？")

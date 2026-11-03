@@ -9,6 +9,7 @@
 - **主界面 → 工作区**：主界面先选择数据、输入问题或附加图片，确认后才进入对话工作区；工作区左侧固定展示历史会话。
 - **折叠式数据面板**：主界面和工作区的对话框顶部都有一个可展开/收起的数据面板，展开后选择 10 个内置数据集或上传 CSV，选择后自动收起。
 - **YOLO 缺陷检测**：附加图片后界面自动切换为「表面缺陷检测模式」，调用本地 `best.pt` 输出缺陷框、类别计数与标注图，再由在线模型解读；检测期间不读取数据集，也可一键退出检测模式。
+- **设备健康看板**：把轴承特征表转换为 0–100 分、四级状态、趋势与告警；支持设备切换、分数环、健康分趋势、评分依据、SSE 实时推送、退化回放与机器人告警推送。
 - **历史会话**：对话自动保存到浏览器 localStorage（最多 15 条），支持恢复、单条删除与清空，刷新或重开浏览器后仍在。
 - **内置实训结果**：轴承特征、模型对比、RUL、ResNet/EfficientNet、YOLO、消融实验等 10 个数据集。
 - **CSV 上传**：自动推断数值/类别/日期字段，支持任意列名与中文表头。
@@ -58,6 +59,7 @@ npm start
 | `VIZ_PYTHON` | YOLO 推理使用的 Python 解释器 | 项目根目录 `.venv/bin/python`，不存在则 `python3` |
 | `VIZ_YOLO_MODEL` | YOLO 权重路径 | `results/week2_3/yolo/train/weights/best.pt` |
 | `VIZ_YOLO_CONF` | 检测置信度阈值 | `0.25` |
+| `VIZ_ALERT_WEBHOOK` | 设备看板机器人 Webhook（钉钉/企业微信） | 空；未配置时推送返回 503 |
 
 任何 OpenAI 兼容服务都可以用，只要实现 `POST /chat/completions`。密钥只存在服务端，`.env` 已被 `.gitignore` 忽略。选择模型时：`deepseek-flash` 响应快，适合图表规划；`deepseek-v4-pro` 更适合长报告与复杂推理。
 
@@ -95,10 +97,35 @@ npm start
 
 支持类别：crazing（龟裂）、inclusion（夹杂）、patches（斑块）、pitted_surface（麻点）、rolled_in_scale（氧化铁皮压入）、scratches（划伤）。默认阈值 0.25，可用 `VIZ_YOLO_CONF` 调整。
 
+## 设备健康看板与推送
+
+看板的数据来自 `src/agent-maintenance/score_devices.py`：它读取 `results/week1/features.csv`，按轴承分组、用前 20% 文件建立基线，再对每个文件计算健康分。评分口径是**可解释规则加权**，不是新训练的模型：
+
+```text
+健康分 = 30%·RMS 得分 + 20%·峭度得分 + 20%·包络峰值得分
+       + 20%·健康阶段得分 + 10%·相对 RUL 得分
+级别：≥85 健康 / ≥70 注意 / ≥50 警告 / <50 危险
+```
+
+先在项目根目录生成评分：
+
+```bash
+.venv/bin/python src/agent-maintenance/score_devices.py
+# results/health_scores.csv    9216 行逐文件评分
+# results/health_devices.json  15 台设备最新状态与告警摘要
+```
+
+Web 端首页右上角点击「设备看板」进入。看板包含设备列表、当前分数环、阶段/RUL/RMS/包络倍数、健康分趋势、最近告警、评分依据与回放按钮。15 台轴承均为全寿命试验，末端状态多为“危险”，点击「回放退化过程」可从第 1 个文件开始观察评分变化。
+
+- **SSE 推送**：`GET /api/dashboard/stream`，事件包括 `hello`、`summary`、`update`、`alert`、`replay`；回放时逐文件推送分数与告警。
+- **回放**：`POST /api/dashboard/replay`，请求体 `{ "deviceId": "35Hz12kN/Bearing1_4", "intervalMs": 500 }`；`POST /api/dashboard/stop` 停止。
+- **机器人推送**：在 `.env` 配置 `VIZ_ALERT_WEBHOOK`（钉钉/企业微信自定义机器人），点击「推送当前告警」或调用 `POST /api/dashboard/push`，请求体 `{ "deviceId": "..." }`。未配置时返回 503，不会伪造发送成功。
+- **刷新评分**：点击「刷新评分」或 `POST /api/dashboard/refresh`，服务端会重新执行 Python 打分脚本。
+
 ## 架构
 
 ```text
-web/（React + Vite + ECharts，home / workspace 双视图）
+web/（React + Vite + ECharts，home / workspace / dashboard 三视图）
    │  POST /api/chat { datasetId, question, history }
    │  POST /api/vision/detect（multipart：file + question）
    ▼
@@ -106,8 +133,11 @@ server/index.ts (Express + TypeScript)
    ├── datasets.ts    CSV 读取、字段画像、内置数据、上传缓存
    ├── llm.ts         统一 Agent 调用：数据画像 + 对话历史 → 自由回答 + 可选图表规格（zod 校验）
    ├── chart.ts       聚合/分组/分位数/热力矩阵 → ECharts option
-   └── vision.ts      调用 python/yolo_detect.py → 检测框、类别计数、Base64 标注图
+   ├── vision.ts      调用 python/yolo_detect.py → 检测框、类别计数、Base64 标注图
+   └── dashboard.ts   读取 health_scores.csv → 设备摘要、SSE、回放、机器人推送
 ```
+
+看板前端为 `web/Dashboard.tsx`：设备列表 + 分数环 + 健康分趋势 + 告警 + 评分依据；通过 `EventSource` 订阅 `/api/dashboard/stream`，回放时逐文件更新。
 
 前端把会话写入 localStorage（键 `viz-agent:sessions:v1`，最多 15 条）；每次提问或检测使用独立的会话令牌，切换数据集、新建对话或打开历史会话后，旧请求结果会被丢弃。
 
@@ -139,6 +169,13 @@ server/index.ts (Express + TypeScript)
 | POST | `/api/datasets/upload` | multipart `file=<csv>` |
 | POST | `/api/chat` | `{ "datasetId": "...", "question": "...", "history": [...] }`；返回 `kind: "chat" \| "chart"`，未配置 503、调用失败 502 |
 | POST | `/api/vision/detect` | multipart `file=<image>` + `question`；返回 `kind: "vision"`、`detections`、`counts`、`image`（data URL）、`model`、`conf`、`width`、`height`、`elapsedMs` |
+| GET | `/api/dashboard/summary` | 15 台设备的分数、等级、趋势、告警数 |
+| GET | `/api/dashboard/device/:id` | 单台设备详情、最近 400 个评分点与最近 30 条告警 |
+| GET | `/api/dashboard/stream` | SSE：`hello` / `summary` / `update` / `alert` / `replay` |
+| POST | `/api/dashboard/replay` | `{ "deviceId": "...", "intervalMs": 500 }` 开始回放 |
+| POST | `/api/dashboard/stop` | 停止回放 |
+| POST | `/api/dashboard/push` | `{ "deviceId": "..." }` 推送当前告警到 `VIZ_ALERT_WEBHOOK`；未配置 503 |
+| POST | `/api/dashboard/refresh` | 重新执行 Python 打分脚本并返回最新摘要 |
 
 ## 示例问题
 
