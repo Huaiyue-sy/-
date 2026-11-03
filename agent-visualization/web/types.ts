@@ -50,11 +50,53 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  kind?: 'chart' | 'chat';
+  kind?: 'chart' | 'chat' | 'vision';
   planner?: 'llm';
   warning?: string;
   summary?: string;
   pending?: boolean;
+}
+
+export interface SessionRecord {
+  id: string;
+  title: string;
+  datasetId: string;
+  datasetName: string;
+  messages: ChatMessage[];
+  chart: ChatResponse | null;
+  vision: VisionResponse | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Detection {
+  className: string;
+  label: string;
+  confidence: number;
+  box: [number, number, number, number];
+}
+
+export interface DetectionCount {
+  className: string;
+  label: string;
+  count: number;
+  maxConfidence: number;
+}
+
+export interface VisionResponse {
+  kind: 'vision';
+  answer: string;
+  image: string;
+  detections: Detection[];
+  counts: DetectionCount[];
+  summary: string;
+  model: string;
+  conf: number;
+  width: number;
+  height: number;
+  elapsedMs: number;
+  planner?: 'llm';
+  warning?: string;
 }
 
 export interface HealthInfo {
@@ -66,4 +108,10 @@ export interface HealthInfo {
     baseUrl: string;
   };
   datasets: number;
+  vision?: {
+    configured: boolean;
+    model: string;
+    python: string;
+    confidence: number;
+  };
 }

@@ -139,6 +139,8 @@ function buildSystemPrompt(dataset: Dataset): string {
   return [
     '你是「工业数据分析与挖掘综合实训」项目的智能体，服务于 XJTU-SY 轴承振动分析与 NEU-DET 金属表面缺陷检测场景。',
     '你的能力不限于画图：可以回答数据问题、解释字段与指标、分析实验结论、给出工程和建模建议，也可以正常寒暄。',
+    '你还可以调用 YOLO 缺陷检测工具：用户在输入框附加金属表面图片后，系统会返回检测框、置信度与标注图，你再解读结果。',
+    '如果用户询问图片检测或缺陷识别，提醒他们点击输入框左侧的回形针附加图片，即可运行 YOLO 缺陷检测。',
     '',
     '输出要求：只输出一个 JSON 对象，不要用 Markdown 代码块，不要输出 JSON 以外的任何前后缀。',
     '格式一（纯文字回答）：{"reply":"给用户的回答","chart":null}',
@@ -443,4 +445,45 @@ export async function replyWithLlm(
     console.warn(`[viz-agent] 图表规格修复调用失败：${message.slice(0, 160)}`);
   }
   return parsed;
+}
+
+export interface DetectionSummaryInput {
+  question: string;
+  detections: Array<{ label: string; confidence: number; box: [number, number, number, number] }>;
+  width: number;
+  height: number;
+  conf: number;
+}
+
+export async function analyzeDetections(input: DetectionSummaryInput): Promise<string> {
+  const config = getLlmConfig();
+  if (!config.apiKey) throw new Error('未配置 LLM API key');
+
+  const system = [
+    '你是工业视觉质检智能体。系统已经调用 YOLOv8 缺陷检测模型，对一张金属表面图像做了检测。',
+    'NEU-DET 六类缺陷：龟裂、夹杂、斑块、麻点、氧化铁皮压入、划伤。',
+    '你会收到检测结果（类别、置信度、像素级边界框）和用户的问题，请用中文做面向工程师的解读：',
+    '1. 先概括检出情况（缺陷类别与数量）；2. 分析主要缺陷及严重程度；3. 给出处理或复检建议。',
+    '只能依据给定的检测结果作答，不要编造图像中不存在的细节；置信度较低或未检出时，提醒人工复核。',
+    '不要输出 JSON、Markdown 标题、加粗或代码块；可以用「·」列点，尽量控制在 300 字以内。',
+  ].join('\n');
+
+  const user = JSON.stringify({
+    question: input.question || '检测并分析这张图片的缺陷',
+    image: { width: input.width, height: input.height },
+    confidenceThreshold: input.conf,
+    detectionCount: input.detections.length,
+    detections: input.detections.map((item) => ({
+      label: item.label,
+      confidence: item.confidence,
+      box: item.box.map((value) => Math.round(value)),
+    })),
+  });
+
+  const content = await callModelWithRetry(config, [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ], 0.3, 700);
+
+  return content.trim().slice(0, 3000);
 }

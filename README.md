@@ -11,7 +11,7 @@
 | NEU-DET 表面 | 六类瑕疵分类 | ResNet18 / EfficientNet-B0 迁移学习 | 准确率 **0.9944** / **0.9889** |
 | NEU-DET 表面 | 缺陷检测 | YOLOv8n 预训练微调 | mAP50 **0.7703**，mAP50-95 **0.4362** |
 | 智能体 | 设备运维诊断 / 视觉质检 | IsolationForest + 分类/RUL + RAG | 两个可离线演示的 CLI 智能体 |
-| 智能体 | 可视化智能体（TypeScript Web） | React + ECharts + OpenAI 兼容接口 | 在线模型自由问答 + 按需生成 7 类图表，内置 10 个数据集 + CSV 上传 |
+| 智能体 | 可视化智能体（TypeScript Web） | React + ECharts + DeepSeek + YOLOv8n | 在线问答、按需出图、CSV 上传、图片缺陷检测、历史会话；主界面选题后进入工作区 |
 
 | 缺陷检测（YOLOv8n） | 学习率 × 损失消融 |
 | :---: | :---: |
@@ -29,7 +29,7 @@
 │   ├── agent-maintenance/       # 设备运维诊断智能体
 │   ├── agent-inspection/        # 视觉质检智能体（SQLite 台账 + RAG + 预警）
 │   └── agent-unified/          # 统一入口：运维 + 质检 + 基础对话
-├── agent-visualization/         # TypeScript 可视化智能体（React + Vite + ECharts + Express）
+├── agent-visualization/         # TypeScript 可视化智能体（主界面 + 工作区 + YOLO 缺陷检测）
 ├── scripts/smoke_test.sh        # 合成小数据全链路自检（18 个入口脚本）
 ├── config/                      # 轴承几何参数
 ├── docs/                        # 实训指南与规划思维导图
@@ -132,21 +132,21 @@ bash scripts/smoke_test.sh
 
 ## 可视化智能体（TypeScript Web）
 
-第三个智能体用自然语言分析数据：选择内置实训结果或上传 CSV，所有提问统一交给在线模型。可以输入“画出 Bearing1_1 的 RMS 随文件序号变化”“对比各模型的准确率和 macroF1”“画学习率×损失热力图”直接出图并导出 PNG；也可以问“RUL 的 R² 为负说明什么”“六类缺陷哪类最难检测”这类问题，由模型自由回答。图表是可选项，不是唯一输出。
+第三个智能体在浏览器里用自然语言分析数据，并能直接检测表面缺陷。主界面先完成数据选择与提问（数据面板默认折叠，展开后选内置数据或上传 CSV），确认后进入工作区；工作区左侧保留历史会话，右侧展示 ECharts 图表或 YOLO 标注结果。
 
-![可视化智能体](agent-visualization/assets/demo.png)
+- **数据分析**：内置 10 个实训结果数据集；完整 `features.csv` 存在时使用 9216 行全量，否则退回 600 行抽样快照。模型返回自由文字 + 可选图表规格，支持折线、柱状、散点、箱线、热力、饼图、直方图与 PNG 导出。
+- **缺陷检测**：附加图片后界面自动切换为「表面缺陷检测模式」，调用项目根目录 `.venv` 中的 Ultralytics 与 `best.pt`，返回缺陷框、类别计数、标注图，并由在线模型解读，可导出 JPG。
+- **历史会话**：对话保存在浏览器 localStorage（最多 15 条），支持恢复、单条删除与清空。
+- **在线模型**：所有问答统一交给 OpenAI 兼容的 DeepSeek；图表规格经 zod 校验。纯在线模式，未配置或调用失败直接报错，不提供离线规则引擎。API key 只保留在服务端 `.env`。
 
 ```bash
 cd agent-visualization
 npm install
-cp .env.example .env   # 必填：在线模型 key；不配则提问直接报配置错误
+cp .env.example .env   # 必填：在线模型 key；可选 VIZ_YOLO_MODEL / VIZ_PYTHON / VIZ_YOLO_CONF
 npm run dev            # 前端 http://localhost:5173，后端 http://localhost:8787
 ```
 
-- 内置 10 个实训结果数据集；完整 `features.csv` 存在时自动使用 9216 行全量数据，否则退回 600 行抽样快照。
-- 服务端把数据画像、最近对话和问题交给 OpenAI 兼容模型，由模型返回自由文字回答和可选图表规格；图表字段受 zod 校验，不合法时本次只返回文字。智能体为纯在线模式：未配置或调用失败直接报错，不提供离线规则引擎。
-- API key 只保留在服务端 `.env`，不会进入前端或 Git。
-- 详细说明见 [agent-visualization/README.md](agent-visualization/README.md)。
+YOLO 检测需要项目根目录 `.venv/bin/python`（含 ultralytics）和 `results/week2_3/yolo/train/weights/best.pt`，默认自动发现。详细说明见 [agent-visualization/README.md](agent-visualization/README.md)。
 
 ## 评估口径
 
@@ -156,6 +156,7 @@ npm run dev            # 前端 http://localhost:5173，后端 http://localhost:
 
 ## 文档
 
+- [项目正式报告](实训报告/项目正式报告.md)：完整版报告，覆盖数据、算法、YOLO 训练与性能、智能体架构、系统测试与复现
 - [实训报告](实训报告/实训报告.md)：需求分析、系统设计、编码实现、系统测试、智能体应用、问题与改进
 - [实训手册](实训手册/)：12 天每日记录（目标、完成情况、问题与解决、次日计划）
 - [数据说明](data/README.md)：两个数据集的下载、目录布局与几何参数
