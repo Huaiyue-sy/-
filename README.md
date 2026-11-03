@@ -11,7 +11,7 @@
 | NEU-DET 表面 | 六类瑕疵分类 | ResNet18 / EfficientNet-B0 迁移学习 | 准确率 **0.9944** / **0.9889** |
 | NEU-DET 表面 | 缺陷检测 | YOLOv8n 预训练微调 | mAP50 **0.7703**，mAP50-95 **0.4362** |
 | 智能体 | 设备运维诊断 / 视觉质检 | IsolationForest + 分类/RUL + RAG | 两个可离线演示的 CLI 智能体 |
-| 智能体 | 可视化智能体（TypeScript Web） | React + ECharts + OpenAI 兼容接口 | 自然语言生成 7 类图表，内置 10 个数据集 + CSV 上传 |
+| 智能体 | 可视化智能体（TypeScript Web） | React + ECharts + OpenAI 兼容接口 | 在线模型自由问答 + 按需生成 7 类图表，内置 10 个数据集 + CSV 上传 |
 
 | 缺陷检测（YOLOv8n） | 学习率 × 损失消融 |
 | :---: | :---: |
@@ -27,7 +27,8 @@
 │   ├── week2-bearing-dl/        # RNN / LSTM / 1D-CNN / LSTM-RUL
 │   ├── week2-3-surface-defect/  # NEU-DET 探索、ResNet/EfficientNet、YOLO、消融
 │   ├── agent-maintenance/       # 设备运维诊断智能体
-│   └── agent-inspection/        # 视觉质检智能体（SQLite 台账 + RAG + 预警）
+│   ├── agent-inspection/        # 视觉质检智能体（SQLite 台账 + RAG + 预警）
+│   └── agent-unified/          # 统一入口：运维 + 质检 + 基础对话
 ├── agent-visualization/         # TypeScript 可视化智能体（React + Vite + ECharts + Express）
 ├── scripts/smoke_test.sh        # 合成小数据全链路自检（18 个入口脚本）
 ├── config/                      # 轴承几何参数
@@ -108,25 +109,42 @@ bash scripts/smoke_test.sh
 /query 麻点的工艺原因是什么？
 ```
 
-两个智能体均支持 **DeepSeek API 优先、离线规则降级**：设置 `DEEPSEEK_API_KEY`（环境变量，或项目根目录 `.env` / `config/deepseek.env`）时由大模型生成报告，无 key 或调用失败时自动切换到同结构的规则模板，断网也能完整演示。`.env` 已被 `.gitignore` 忽略，不会提交。
+## 统一智能体（运维 + 质检 + 对话）
+
+`src/agent-unified/` 把两个智能体合并为一个入口，并增加带上下文的基础对话。可以直接用自然语言路由：
+
+```bash
+.venv/bin/python src/agent-unified/main.py
+
+诊断 data/XJTU-SY_Bearing_Datasets/35Hz12kN/Bearing1_1/123.csv
+生成报告 data/XJTU-SY_Bearing_Datasets/35Hz12kN/Bearing1_1/123.csv
+检测 data/NEU-DET/IMAGES/scratches_10.jpg 3号机台
+3号机台最近有什么异常？
+划伤是什么工艺原因？
+项目目前的模型指标怎么样？
+```
+
+也保留 `/scan`、`/report`、`/inspect`、`/query`、`/alerts`、`/status`、`/rag`、`/chat`、`/reset`、`/history` 显式命令。
+
+两个智能体均支持 **DeepSeek API 优先、离线前确认**：设置 `DEEPSEEK_API_KEY`（环境变量，或项目根目录 `.env` / `config/deepseek.env`）时由大模型生成报告；无 key 或调用失败时不会自动切换，CLI 会先询问 `[y/N]`，确认后才使用同结构的离线规则模板。`.env` 已被 `.gitignore` 忽略，不会提交。
 
 > 智能体依赖 `models/` 下的分类、RUL 与 ResNet 权重（如 `week1_classifier.joblib`、`resnet18_neu.pth`）。这些文件体积较大且不入库，请先按上一节命令训练生成，或把本机 `models/` 目录复制过来。
 
 ## 可视化智能体（TypeScript Web）
 
-第三个智能体用自然语言生成图表：选择内置实训结果或上传 CSV，输入“画出 Bearing1_1 的 RMS 随文件序号变化”“对比各模型的准确率和 macroF1”“画学习率×损失热力图”等，浏览器直接出图并可导出 PNG。
+第三个智能体用自然语言分析数据：选择内置实训结果或上传 CSV，所有提问统一交给在线模型。可以输入“画出 Bearing1_1 的 RMS 随文件序号变化”“对比各模型的准确率和 macroF1”“画学习率×损失热力图”直接出图并导出 PNG；也可以问“RUL 的 R² 为负说明什么”“六类缺陷哪类最难检测”这类问题，由模型自由回答。图表是可选项，不是唯一输出。
 
 ![可视化智能体](agent-visualization/assets/demo.png)
 
 ```bash
 cd agent-visualization
 npm install
-cp .env.example .env   # 可选：填入 OpenAI 兼容 key；不配也能用规则引擎
+cp .env.example .env   # 必填：在线模型 key；不配则提问直接报配置错误
 npm run dev            # 前端 http://localhost:5173，后端 http://localhost:8787
 ```
 
 - 内置 10 个实训结果数据集；完整 `features.csv` 存在时自动使用 9216 行全量数据，否则退回 600 行抽样快照。
-- 服务端先调 OpenAI 兼容模型生成受 zod 约束的图表规格，失败或字段不合法时自动切换规则引擎。
+- 服务端把数据画像、最近对话和问题交给 OpenAI 兼容模型，由模型返回自由文字回答和可选图表规格；图表字段受 zod 校验，不合法时本次只返回文字。智能体为纯在线模式：未配置或调用失败直接报错，不提供离线规则引擎。
 - API key 只保留在服务端 `.env`，不会进入前端或 Git。
 - 详细说明见 [agent-visualization/README.md](agent-visualization/README.md)。
 
